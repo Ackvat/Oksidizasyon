@@ -5,8 +5,12 @@ edition = "2024"
 
 [features]
 default = ["std"]
-std = ["alloc"]
-alloc = []
+std = []
+emd = ["dep:embedded-alloc"]
+#std = ["alloc"]
+#alloc = []
 
 [dependencies]
 libm = "0.2"
+#heapless = "0.9.3"
+embedded-alloc = { version = "0.7.0", optional = true }

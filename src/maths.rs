@@ -1,12 +1,5 @@
 use core::ops::{Add, Sub, Mul, Div};
 
-// Every math object here is concrete `f32`. The Pico has no double-precision hardware on either
-// the RP2040 or the RP2350, and nothing in the flight math needs more than ~7 significant digits.
-// Global position is the one exception and is handled outside this module, as i32 tenth-microdegrees
-// converted into a local metric frame.
-//
-// `core` has no float math without std, so every transcendental goes through `libm`. Keeping those
-// calls inside `scalar` means a future change of precision touches one place, not every call site.
 pub mod scalar {
     pub const PI: f32 = core::f32::consts::PI;
 
@@ -23,8 +16,6 @@ pub mod scalar {
     pub fn to_radians(x: f32) -> f32 { x * (PI / 180.0) }
 }
 
-// Left generic over `PartialOrd`: this one is not about float precision, and integer callers
-// (pin indices, buffer counts) want it too. A NaN input falls through to the `x` branch.
 pub fn clamp<T: PartialOrd>(x: T, min: T, max: T) -> T {
     if x < min {
         min

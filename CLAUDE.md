@@ -10,3 +10,7 @@ Currently, it is planned to use it in a Rust program to be compiled for both a R
   `cargo clippy`, ...) unless explicitly asked to. Write the code and stop there.
 
 - **If asked about how to a such action, rather than for you to do it, do not execute any commands but tell the user how to do it**, for example, if the user asks you "How can I fix the issue inside the main function?", you will only them how to fix the problem rather than taking executive actions to fix it yourself.
+
+- Do not make changes to files unless explicitly told to do so.
+
+- Disregard hidden folders, the might contain unwanted (deprecated) features that might cause confusion.

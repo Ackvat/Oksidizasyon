@@ -1,154 +1,93 @@
-use core::fmt;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct Base {
-    pub name: &'static str,
-}
-
-impl Base {
-    pub const fn new(name: &'static str) -> Self {
-        Self { name }
-    }
-}
-
-pub trait Object {
-    fn base(&self) -> &Base;
-    fn base_mut(&mut self) -> &mut Base;
-
-    fn name(&self) -> &'static str {
-        self.base().name
-    }
-
-    fn set_name(&mut self, name: &'static str) {
-        self.base_mut().name = name;
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Level {
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-}
-
-impl Level {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Level::Trace => "TRACE",
-            Level::Debug => "DEBUG",
-            Level::Info  => "INFO",
-            Level::Warn  => "WARN",
-            Level::Error => "ERROR",
+    #[test]
+    fn test() {
+        let mut nodespace = Nodespace::new();
+        let testnode_id = nodespace.add_node(String::from("testnode"));
+        
+        if let Some(node) = nodespace.get_node_mut(testnode_id) {
+            node.name = String::from("testnode_1");
+            println!("Node name: {:?}", node);
         }
+        
+        println!("Parent name: {:?}", nodespace);
     }
 }
 
-pub trait Sink {
-    fn record(&mut self, level: Level, source: &str, args: fmt::Arguments);
-
-    // Called at a safe point, not from the control loop, for sinks that buffer.
-    fn flush(&mut self) {}
-}
-
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
-pub struct NopSink;
-
-impl Sink for NopSink {
-    fn record(&mut self, _level: Level, _source: &str, _args: fmt::Arguments) {}
-}
-
-pub struct FmtSink<W: fmt::Write> {
-    pub writer: W,
-}
-
-impl<W: fmt::Write> FmtSink<W> {
-    pub const fn new(writer: W) -> Self {
-        Self { writer }
-    }
-}
-
-impl<W: fmt::Write> Sink for FmtSink<W> {
-    fn record(&mut self, level: Level, source: &str, args: fmt::Arguments) {
-        // Errors are dropped on purpose, see `Sink`.
-        let _ = writeln!(self.writer, "[{}] {}: {}", level.as_str(), source, args);
-    }
-}
+use alloc::{string::String, vec::Vec};
 
 #[derive(Debug, Clone)]
-pub struct Logger<S: Sink> {
-    pub sink: S,
-    pub min_level: Level,
-    pub enabled: bool,
+pub struct Nodespace {
+    pub nodes: Vec<Option<Node>>,
 }
 
-impl<S: Sink> Logger<S> {
-    pub const fn new(sink: S) -> Self {
-        Self { sink, min_level: Level::Info, enabled: true }
+impl Nodespace {
+    pub fn new() -> Self {
+        Self {
+            nodes: Vec::new(),
+        }
+    }
+    
+    // Creates a node inside the nodespace.
+    pub fn add_node(&mut self, name: String) -> usize {
+        let id = self.nodes.len();
+        let mut node = Node::new(name);
+        node.id = id;
+        self.nodes.push(Some(node));
+        id
     }
 
-    pub const fn with_min_level(mut self, min_level: Level) -> Self {
-        self.min_level = min_level;
-        self
+    pub fn remove_node(&mut self, id: usize) -> Option<Node> {
+        let node = self.nodes.get_mut(id)?.take()?;
+
+        if let Some(p) = node.parent {
+            if let Some(pn) = self.get_node_mut(p) {
+                pn.children.retain(|&c| c != id);
+            }
+        }
+
+        for &c in &node.children {
+            if let Some(cn) = self.get_node_mut(c) {
+                cn.parent = None;
+            }
+        }
+
+        Some(node)
     }
 
-    pub const fn with_enabled(mut self, enabled: bool) -> Self {
-        self.enabled = enabled;
-        self
+    pub fn get_node(&self, id: usize) -> Option<&Node> {
+        self.nodes.get(id)?.as_ref()
     }
 
-    pub fn log(&mut self, level: Level, source: &str, args: fmt::Arguments) {
-        if self.enabled && level >= self.min_level {
-            self.sink.record(level, source, args);
+    pub fn get_node_mut(&mut self, id: usize) -> Option<&mut Node> {
+        self.nodes.get_mut(id)?.as_mut()
+    }
+}
+
+
+
+#[derive(Debug, Clone)]
+pub struct Node {
+    pub id: usize,
+    pub parent: Option<usize>,
+    pub children: Vec<usize>,
+
+    pub name: String,
+}
+
+impl Node {
+    pub fn new(name: String) -> Self {
+        Self {
+            id: 0,
+            parent: None,
+            children: Vec::new(),
+            name,
         }
     }
 
-    pub fn flush(&mut self) {
-        self.sink.flush();
-    }
-}
-
-impl Default for Logger<NopSink> {
-    fn default() -> Self {
-        Self::new(NopSink)
-    }
-}
-
-#[macro_export]
-macro_rules! log {
-    ($logger:expr, $level:expr, $source:expr, $($arg:tt)*) => {
-        $logger.log($level, $source, core::format_args!($($arg)*))
-    };
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct Basic {
-    base: Base,
-}
-
-impl Basic {
-    pub const fn new(name: &'static str) -> Self {
-        Self { base: Base::new(name) }
-    }
-
-    pub fn report<S: Sink>(&self, logger: &mut Logger<S>, level: Level, args: fmt::Arguments) {
-        logger.log(level, self.base.name, args);
-    }
-}
-
-impl Object for Basic {
-    fn base(&self) -> &Base {
-        &self.base
-    }
-
-    fn base_mut(&mut self) -> &mut Base {
-        &mut self.base
-    }
-}
-
-pub struct UARTBasic {
-}
-
-pub struct I2CBasic {
+    pub fn with_parent(mut self, parent_id: Option<usize>) {
+        self.parent = parent_id;
+    } 
 }
