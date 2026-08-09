@@ -45,6 +45,7 @@ impl<C> Nodespace<C> {
         let id = self.nodes.len();
         let mut node = Node::new(name);
         node.id = id;
+        node.parent = parent_id;
         self.nodes.push(Some(node));
         id
     }
@@ -79,21 +80,22 @@ impl<C> Nodespace<C> {
         self.nodes.iter().flatten().find(|n| n.name == name)
     }
 
-    pub fn set_node_parent(&mut self, node_id: usize, parent_id: Option<usize>) -> Option<&Node<C>>{
-        let node = self.nodes.get_mut(node_id)?;
+    pub fn set_node_parent(&mut self, node_id: usize, parent_id: Option<usize>) -> bool {
+        let the_node_in_question = match self.get_node_mut(node_id) {
+            Some(n) => n,
+            None => return false,
+        };
 
-        // Detach existing parent, if there is one.
-        if let Some(p) = node.parent {
-            if let Some(pn) = self.get_node_mut(p) {
-                pn.children.retain(|&c| c != node.id);
-            }
+        if let Some(old_parent) = self.get_node_mut(the_node_in_question.parent.unwrap()) {
+            old_parent.children.retain(|&c| c != node_id);
         }
 
-        // Set the parent_id
-        node.parent = parent_id;
+        if let Some(new_parent) = self.get_node_mut(parent_id.unwrap()) {
+            new_parent.children.push(node_id);
+            the_node_in_question.parent = parent_id;    
+        }
 
-        // Return the current parent just in case it is needed.
-        Some(self.get_node(parent_id))
+        true
     }
 }
 
